@@ -143,7 +143,13 @@ def call_groq(system_prompt: str, user_prompt: str, model: str = MODEL_NAME) -> 
             {"role": "user", "content": user_prompt},
         ],
         "temperature": 0.3,
+        "max_tokens": 4096,
     }
+
+    # Qwen models "think" before answering, jo tokens khatam kr deta hai aur
+    # code adhoora reh jata hai. Reasoning off kr dete hain - hume seedha code chahiye.
+    if model.startswith("qwen/"):
+        payload["reasoning_effort"] = "none"
 
     try:
         resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
@@ -180,6 +186,11 @@ def looks_like_refusal(text: str) -> bool:
 
 
 def extract_code_block(raw_text: str, ext_hint: str):
+    # Reasoning models kabhi <think>...</think> chhod dete hain - pehle hata dein
+    raw_text = re.sub(r"<think>.*?</think>", "", raw_text, flags=re.DOTALL)
+    # Agar </think> band tag ho lekin opening na mila ho (truncated), tab bhi hata dein
+    raw_text = re.sub(r"^.*?</think>", "", raw_text, flags=re.DOTALL)
+
     pattern = r"```[a-zA-Z]*\n(.*?)```"
     match = re.search(pattern, raw_text, re.DOTALL)
     if not match:
