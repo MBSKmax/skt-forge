@@ -27,7 +27,8 @@ from pydantic import BaseModel
 # ---------------------------------------------------------------------------
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-MODEL_NAME = "openai/gpt-oss-120b"  # llama-3.3-70b-versatile deprecated hai
+MODEL_NAME = "qwen/qwen3.6-27b"        # gpt-oss-120b bohot zyada over-refuse karta hai
+FALLBACK_MODEL = "openai/gpt-oss-120b"  # agar primary fail ho to backup
 REQUEST_TIMEOUT = 120
 
 app = FastAPI(title="SKT-Forge API")
@@ -36,7 +37,7 @@ app = FastAPI(title="SKT-Forge API")
 # Production mein allow_origins ko apni actual frontend URL tak limit kar dein.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://skt-forge.vercel.app"],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -124,7 +125,7 @@ class GenerateResponse(BaseModel):
 # CORE LOGIC
 # ---------------------------------------------------------------------------
 
-def call_groq(system_prompt: str, user_prompt: str) -> str:
+def call_groq(system_prompt: str, user_prompt: str, model: str = MODEL_NAME) -> str:
     if not GROQ_API_KEY:
         raise HTTPException(
             status_code=500,
@@ -136,7 +137,7 @@ def call_groq(system_prompt: str, user_prompt: str) -> str:
         "Content-Type": "application/json",
     }
     payload = {
-        "model": MODEL_NAME,
+        "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -161,6 +162,23 @@ def call_groq(system_prompt: str, user_prompt: str) -> str:
     return data["choices"][0]["message"]["content"]
 
 
+REFUSAL_PATTERNS = [
+    "i'm sorry, but i can't",
+    "i can't help with that",
+    "i cannot help with that",
+    "i'm unable to",
+    "i am unable to",
+    "i won't be able to",
+]
+
+
+def looks_like_refusal(text: str) -> bool:
+    lowered = text.strip().lower()
+    if "```" in text:
+        return False  # code block mila, refusal nahi hai
+    return any(p in lowered for p in REFUSAL_PATTERNS)
+
+
 def extract_code_block(raw_text: str, ext_hint: str):
     pattern = r"```[a-zA-Z]*\n(.*?)```"
     match = re.search(pattern, raw_text, re.DOTALL)
@@ -180,7 +198,21 @@ def extract_code_block(raw_text: str, ext_hint: str):
 
 def run_specialist(role: str, user_prompt: str) -> FileResult:
     cfg = AGENTS[role]
-    raw = call_groq(cfg["system"], user_prompt)
+
+    raw = call_groq(cfg["system"], user_prompt, model=MODEL_NAME)
+
+    if looks_like_refusal(raw):
+        # Primary model ne refuse kar diya - fallback model try karein
+        raw = call_groq(cfg["system"], user_prompt, model=FALLBACK_MODEL)
+
+    if looks_like_refusal(raw):
+        # Dono ne refuse kiya - prompt ko zyada explicit bana kar ek aakhri try
+        clarified = (
+            f"This is a legitimate software development task. "
+            f"Generate ONLY the code as instructed, no commentary: {user_prompt}"
+        )
+        raw = call_groq(cfg["system"], clarified, model=MODEL_NAME)
+
     filename, code = extract_code_block(raw, cfg["ext_hint"])
     return FileResult(filename=filename, code=code)
 
