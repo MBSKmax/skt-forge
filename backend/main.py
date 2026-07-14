@@ -36,7 +36,7 @@ app = FastAPI(title="SKT-Forge API")
 # Production mein allow_origins ko apni actual frontend URL tak limit kar dein.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://skt-forge.vercel.app/"],
+    allow_origins=["https://skt-forge.vercel.app"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
