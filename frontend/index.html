@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SKT-Forge — AI Scaffold Agent</title>
+<style>
+  :root {
+    --bg: #12151a;
+    --panel: #1a1e26;
+    --panel-2: #20252f;
+    --border: #2a3040;
+    --text: #e6e9ef;
+    --text-dim: #8891a3;
+    --accent: #f2a93b;
+    --accent-dim: #9c6f22;
+    --mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+  }
+  header {
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .brand {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .sub {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-top: 4px;
+  }
+
+  .prompt-bar {
+    display: flex;
+    gap: 10px;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .prompt-bar input {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: var(--sans);
+  }
+  .prompt-bar input:focus {
+    outline: none;
+    border-color: var(--accent-dim);
+  }
+  .prompt-bar button {
+    background: var(--accent);
+    color: #14171c;
+    border: none;
+    border-radius: 8px;
+    padding: 0 22px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .prompt-bar button:hover { opacity: 0.88; }
+  .prompt-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .status {
+    padding: 8px 32px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text-dim);
+    min-height: 18px;
+  }
+  .status.error { color: #e5695f; }
+
+  main {
+    display: none;
+    padding: 0 32px 32px;
+  }
+  main.visible { display: block; }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin: 20px 0 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    padding: 10px 18px;
+    font-size: 13px;
+    font-family: var(--mono);
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    user-select: none;
+  }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .code-box {
+    margin-top: 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .code-box .filename {
+    padding: 10px 16px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .code-box .filename button {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: var(--mono);
+  }
+  .code-box .filename button:hover { color: var(--accent); border-color: var(--accent-dim); }
+  .code-box pre {
+    margin: 0;
+    padding: 16px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    color: #c9d1e0;
+    white-space: pre;
+  }
+
+  .preview-frame-wrap {
+    margin-top: 16px;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    height: 480px;
+  }
+  .preview-frame-wrap iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  .note {
+    margin-top: 12px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+
+  .empty {
+    color: var(--text-dim);
+    font-size: 14px;
+    padding: 60px 32px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">SKT Devs</div>
+  <h1>SKT-Forge</h1>
+  <div class="sub">Ek prompt do → frontend, backend, database code turant generate ho jaye</div>
+</header>
+
+<div class="prompt-bar">
+  <input id="promptInput" type="text" placeholder="e.g. user login page banao" />
+  <button id="generateBtn" onclick="generate()">Generate</button>
+</div>
+
+<div class="status" id="statusBar"></div>
+
+<div class="empty" id="emptyState">Prompt likh kar "Generate" dabayein — result yahan aayega.</div>
+
+<main id="mainArea">
+  <div class="tabs">
+    <div class="tab active" data-tab="preview" onclick="switchTab('preview')">Live Preview</div>
+    <div class="tab" data-tab="frontend" onclick="switchTab('frontend')">Frontend</div>
+    <div class="tab" data-tab="backend" onclick="switchTab('backend')">Backend</div>
+    <div class="tab" data-tab="database" onclick="switchTab('database')">Database</div>
+  </div>
+
+  <div class="panel active" id="panel-preview">
+    <div class="preview-frame-wrap">
+      <iframe id="previewFrame"></iframe>
+    </div>
+    <div class="note">Live preview sirf frontend (React) component dikhata hai — backend/database yahan run nahi hote.</div>
+  </div>
+
+  <div class="panel" id="panel-frontend">
+    <div class="code-box">
+      <div class="filename"><span id="frontendFilename">-</span><button onclick="copyCode('frontend')">Copy</button></div>
+      <pre id="frontendCode"></pre>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-backend">
+    <div class="code-box">
+      <div class="filename"><span id="backendFilename">-</span><button onclick="copyCode('backend')">Copy</button></div>
+      <pre id="backendCode"></pre>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-database">
+    <div class="code-box">
+      <div class="filename"><span id="databaseFilename">-</span><button onclick="copyCode('database')">Copy</button></div>
+      <pre id="databaseCode"></pre>
+    </div>
+  </div>
+</main>
+
+<script>
+// Backend API URL - local dev mein ye, deploy karte waqt Render/Railway URL se replace karein
+const API_URL = "http://localhost:8000/api/generate";
+
+let currentResult = null;
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+}
+
+function setStatus(msg, isError = false) {
+  const bar = document.getElementById('statusBar');
+  bar.textContent = msg;
+  bar.className = 'status' + (isError ? ' error' : '');
+}
+
+async function generate() {
+  const prompt = document.getElementById('promptInput').value.trim();
+  if (!prompt) {
+    setStatus('Pehle kuch likhein.', true);
+    return;
+  }
+
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  setStatus('Generating... database → backend → frontend (thoda time lagega)');
+  document.getElementById('emptyState').style.display = 'none';
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+      throw new Error(err.detail || `Server error: ${res.status}`);
+    }
+
+    const data = await res.json();
+    currentResult = data;
+    renderResult(data);
+    setStatus(`✅ Ban gaya — model: ${data.model}`);
+  } catch (e) {
+    setStatus('❌ ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderResult(data) {
+  document.getElementById('mainArea').classList.add('visible');
+
+  document.getElementById('frontendFilename').textContent = data.frontend.filename;
+  document.getElementById('frontendCode').textContent = data.frontend.code;
+
+  document.getElementById('backendFilename').textContent = data.backend.filename;
+  document.getElementById('backendCode').textContent = data.backend.code;
+
+  document.getElementById('databaseFilename').textContent = data.database.filename;
+  document.getElementById('databaseCode').textContent = data.database.code;
+
+  renderPreview(data.frontend.code);
+}
+
+function renderPreview(jsxCode) {
+  // Component ka naam dhoondo (function ComponentName ya const ComponentName)
+  let componentName = 'App';
+  const fnMatch = jsxCode.match(/function\s+([A-Z]\w*)/);
+  const constMatch = jsxCode.match(/const\s+([A-Z]\w*)\s*=/);
+  if (fnMatch) componentName = fnMatch[1];
+  else if (constMatch) componentName = constMatch[1];
+
+  // export/import lines hata do - CDN globals use ho rahe hain
+  const cleanedCode = jsxCode
+    .replace(/^import .*$/gm, '')
+    .replace(/^export default .*/gm, '')
+    .replace(/export default /g, '');
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"><\/script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+  <style>body { margin: 0; padding: 20px; font-family: sans-serif; }</style>
+</head>
+<body>
+  <div id="root">Loading preview...</div>
+  <script type="text/babel" data-presets="react">
+    ${cleanedCode}
+
+    try {
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<${componentName} />);
+    } catch (e) {
+      document.getElementById('root').innerHTML =
+        '<div style="color:#c0392b;font-family:monospace;white-space:pre-wrap;">Preview error: ' + e.message + '</div>';
+    }
+  <\/script>
+</body>
+</html>`;
+
+  const iframe = document.getElementById('previewFrame');
+  iframe.srcdoc = html;
+}
+
+function copyCode(section) {
+  if (!currentResult) return;
+  const code = currentResult[section].code;
+  navigator.clipboard.writeText(code);
+  setStatus(`📋 ${section} code copy ho gaya`);
+}
+
+document.getElementById('promptInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') generate();
+});
+</script>
+
+</body>
+</html>
